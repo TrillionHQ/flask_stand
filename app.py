@@ -16,32 +16,27 @@ from flask_cors import CORS
 CORS(app)
 
 
-# Загрузка модели TensorFlow
 model = tf.keras.models.load_model('edge-detection-tfteed-60k-mish.keras')
 
 
 def preprocess_image(image):
     if image.shape[2] == 4:
-        image = image[:, :, :3]  # Убираем альфа-канал
+        image = image[:, :, :3] 
 
-    image = cv2.resize(image, (224, 224))  # Размер зависит от модели
+    image = cv2.resize(image, (512, 512))
     image = image.astype(np.float32)
-    image -= [103.939, 116.779, 123.68]  # Вычитание средних значений
-    return np.expand_dims(image, axis=0)  # Добавляем размерность для батча, если это необходимо
+    image -= [103.939, 116.779, 123.68] 
+    return np.expand_dims(image, axis=0)  
 
 def postprocess_output(outputs):
-    # Суммирование всех четырех тензоров поэлементно
-    summed_output = outputs[0] + outputs[1] + outputs[2] + outputs[3]
-    
-    summed_output = np.squeeze(summed_output)
-    summed_output = cv2.resize(summed_output, (640, 480))  # Возвращаем к размеру исходного изображения
-    summed_output = (summed_output - summed_output.min()) / (summed_output.max() - summed_output.min())  # Нормализация
-    summed_output = (summed_output * 255).astype(np.uint8)  # Преобразование в 8-битное изображение
 
-    # Преобразование в 3 канала для совместимости с cv2.imencode
-    summed_output = cv2.cvtColor(summed_output, cv2.COLOR_GRAY2RGB)
-    
-    return summed_output
+    output = np.squeeze(outputs[-1])
+    output = cv2.resize(output, (640, 480))  
+    output = (output - output.min()) / (output.max() - output.min())  
+    output = (output * 255).astype(np.uint8)  
+    output = cv2.cvtColor(output, cv2.COLOR_GRAY2RGB)
+   
+    return output
 
 @app.route('/process_image', methods=['POST'])
 def process_image():
@@ -54,9 +49,8 @@ def process_image():
     preprocessed_image = preprocess_image(image)
     outputs = model.predict(preprocessed_image)
 
-    processed_output = postprocess_output(outputs)  # Суммируем поэлементно все выходные тензоры
+    processed_output = postprocess_output(outputs)  
 
-    # Преобразование результата в изображение для отправки клиенту
     try:
         _, img_encoded = cv2.imencode('.png', processed_output)
         return send_file(BytesIO(img_encoded), mimetype='image/png')
