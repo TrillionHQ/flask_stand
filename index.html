@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge Detection</title>
+</head>
+
+<body>
+    <h1>Webcam Edge Detection</h1>
+    <video id="webcam" width="640" height="480" autoplay></video>
+    <br>
+    <button id="capture">Capture Image</button>
+    <br>
+    <canvas id="originalCanvas" width="640" height="480"></canvas>
+    <br>
+    <canvas id="outputCanvas" width="640" height="480"></canvas>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const outputCanvas = document.getElementById('outputCanvas');
+        const captureButton = document.getElementById('capture');
+        const originalContext = originalCanvas.getContext('2d');
+        const outputContext = outputCanvas.getContext('2d');
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: true
+            });
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    resolve(video);
+                };
+            });
+        }
+
+        captureButton.addEventListener('click', async () => {
+            // Захват изображения с камеры
+            originalContext.drawImage(video, 0, 0, originalCanvas.width, originalCanvas.height);
+
+            const imageData = originalCanvas.toDataURL('image/png');
+
+            const formData = new FormData();
+            formData.append('image', dataURItoBlob(imageData), 'image.png');
+
+            const response = await fetch('http://127.0.0.1:5000/process_image', {
+                method: 'POST',
+                body: formData
+            });
+
+
+            // Получение карты контуров от сервера
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.src = url;
+
+            img.onload = () => {
+                outputContext.drawImage(img, 0, 0, outputCanvas.width, outputCanvas.height);
+                URL.revokeObjectURL(url);
+            };
+        });
+
+        function dataURItoBlob(dataURI) {
+            const byteString = atob(dataURI.split(',')[1]);
+            const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], { type: mimeString });
+        }
+
+        setupCamera();
+    </script>
+</body>
+
+</html>
